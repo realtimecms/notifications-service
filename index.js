@@ -474,6 +474,10 @@ definition.action({
 module.exports = definition
 
 async function start() {
+  process.on('unhandledRejection', (reason, p) => {
+    console.log('Unhandled Rejection at: Promise', p, 'reason:', reason)
+  })
+
   app.processServiceDefinition(definition, [ ...app.defaultProcessors ])
   await app.updateService(definition)//, { force: true })
   const service = await app.startService(definition, { runCommands: true, handleEvents: true })
@@ -481,7 +485,3 @@ async function start() {
 }
 
 if (require.main === module) start().catch( error => { console.error(error); process.exit(1) })
-
-process.on('unhandledRejection', (reason, p) => {
-  console.log('Unhandled Rejection at: Promise', p, 'reason:', reason)
-})
