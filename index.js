@@ -21,26 +21,6 @@ const PublicSessionInfo = definition.foreignModel('accessControl', 'PublicSessio
 
 const config = require('../config/notifications.js')(definition)
 
-const unreadNotificationsIndexFunction = async function(input, output, { idFunction }) {
-  const getId = eval(idFunction)
-  await input.table('notifications_Notification').onChange((obj, oldObj) => {
-    const id = obj ? getId(obj) : getId(oldObj)
-    const oldUnread = !!(oldObj && (oldObj.readState == 'new'))
-    const unread = !!(obj && (obj.readState == 'new'))
-    if(!id) return
-    if(unread != oldUnread) {
-      if(unread) {
-        output.update(id, [
-          { op: "addToSet", property: 'unread', value: obj.id }
-        ])
-      } else {
-        output.update(id, [
-          { op: "deleteFromSet", property: 'unread', value: obj.id }
-        ])
-      }
-    }
-  })
-}
 
 const Notification = definition.model({
   name: "Notification",
@@ -84,42 +64,135 @@ const Notification = definition.model({
     sessionNotificationsByReadState: {
       property: ["session", "readState"]
     },
-    userUnreadNotificationsIds: { /// For counting
-      function: unreadNotificationsIndexFunction,
-      parameters: {
-        idFunction: `(${(obj => obj.user)})`
-      }
-    },
-    sessionUnreadNotificationsIds: { /// For Counting
-      function: unreadNotificationsIndexFunction,
-      parameters: {
-        idFunction: `(${(obj => obj.session)})`
-      }
-    },
     userUnreadNotificationsCount: { /// For counting
       function: async function(input, output) {
-        function mapper(obj) {
-          return obj && { id: obj.id,
-            unread: obj.unread && obj.unread.length || 0
+        await input.table('notifications_Notification').onChange(
+          (obj, oldObj, id, ts) => {
+            const unread = obj && obj.user && obj.readState == 'new'
+            const oldUnread = oldObj && oldObj.user && oldObj.readState == 'new'
+            if(unread && !oldUnread) { // now unread
+              output.update(obj.user, [
+                { op: "conditional",
+                  conditions: [
+                    { test: 'notExist', property: 'count' }
+                  ],
+                  operations: [
+                    { op: 'set', property: 'count', value: 1 },
+                    { op: 'set', property: 'lastUpdate', value: ts }
+                  ]
+                },
+                { op: "conditional",
+                  conditions: [
+                    { test: 'lt', property: 'lastUpdate', value: ts }
+                  ],
+                  operations: [
+                    { op: 'add', property: 'count', value: 1 }
+                  ]
+                },
+                { op: 'merge', value: { severity: obj.severity, scan: obj.scan, lastUpdate: ts } },
+              ])
+            } else if(!unread && oldUnread) { // been unread
+              output.update(obj.user, [
+                { op: "conditional",
+                  conditions: [
+                    { test: 'lt', property: 'lastUpdate', value: ts }
+                  ],
+                  operations: [
+                    { op: 'add', property: 'count', value: -1 }
+                  ]
+                }
+              ])
+            }
           }
-        }
-        await input.index('notifications_Notification_userUnreadNotificationsIds').onChange(
-            (obj, oldObj) => output.change(mapper(obj), mapper(oldObj))
         )
       }
     },
-    sessionUnreadNotificationsCount: { /// For Counting
+    sessionUnreadNotificationsCount: { /// For counting
       function: async function(input, output) {
-        function mapper(obj) {
-          return obj && { id: obj.id,
-            unread: obj.unread && obj.unread.length || 0
-          }
-        }
-        await input.index('notifications_Notification_sessionUnreadNotificationsIds').onChange(
-            (obj, oldObj) => output.change(mapper(obj), mapper(oldObj))
+        await input.table('notifications_Notification').onChange(
+            (obj, oldObj, id, ts) => {
+              const unread = obj && obj.session && obj.readState == 'new'
+              const oldUnread = oldObj && oldObj.session && oldObj.readState == 'new'
+              if(unread && !oldUnread) { // now unread
+                output.update(obj.session, [
+                  { op: "conditional",
+                    conditions: [
+                      { test: 'notExist', property: 'count' }
+                    ],
+                    operations: [
+                      { op: 'set', property: 'count', value: 1 },
+                      { op: 'set', property: 'lastUpdate', value: ts }
+                    ]
+                  },
+                  { op: "conditional",
+                    conditions: [
+                      { test: 'lt', property: 'lastUpdate', value: ts }
+                    ],
+                    operations: [
+                      { op: 'add', property: 'count', value: 1 }
+                    ]
+                  },
+                  { op: 'merge', value: { severity: obj.severity, scan: obj.scan, lastUpdate: ts } },
+                ])
+              } else if(!unread && oldUnread) { // been unread
+                output.update(obj.session, [
+                  { op: "conditional",
+                    conditions: [
+                      { test: 'lt', property: 'lastUpdate', value: ts }
+                    ],
+                    operations: [
+                      { op: 'add', property: 'count', value: -1 }
+                    ]
+                  }
+                ])
+              }
+            }
         )
       }
     },
+
+    bySeverityCount: {
+      function: async function(input, output) {
+        await input.table('xmlAlert_Result').onChange(
+            (obj, oldObj, id, ts) => {
+              const oldSeverity = oldObj && oldObj.severity
+              const severity = obj && obj.severity
+              if(severity != oldSeverity) {
+                if(oldSeverity) output.update(`${oldObj.scan}_${oldSeverity}`, [
+                  { op: "conditional",
+                    conditions: [
+                      { test: 'lt', property: 'lastUpdate', value: ts }
+                    ],
+                    operations: [
+                      { op: 'add', property: 'count', value: -1 }
+                    ]
+                  }
+                ])
+                if(severity) output.update(`${obj.scan}_${severity}`, [
+                  { op: "conditional",
+                    conditions: [
+                      { test: 'notExist', property: 'count' }
+                    ],
+                    operations: [
+                      { op: 'set', property: 'count', value: 1 },
+                      { op: 'set', property: 'lastUpdate', value: ts }
+                    ]
+                  },
+                  { op: "conditional",
+                    conditions: [
+                      { test: 'lt', property: 'lastUpdate', value: ts }
+                    ],
+                    operations: [
+                      { op: 'add', property: 'count', value: 1 }
+                    ]
+                  },
+                  { op: 'merge', value: { severity: obj.severity, scan: obj.scan, lastUpdate: ts } },
+                ])
+              }
+            }
+        )
+      }
+    }
   },
   crud: {
     deleteTrigger: true,
@@ -169,6 +242,32 @@ definition.event({
           ? Notification.tableName + "_userNotificationsByReadState"
           : Notification.tableName + "_sessionNotificationsByReadState",
       update,
+      range: {
+        gte: prefix,
+        lte: prefix + "\xFF\xFF\xFF\xFF"
+      }
+    })
+  }
+})
+
+definition.event({
+  name: "allRemoved",
+  async execute({ user, session }) {
+    const prefix = user
+        ? JSON.stringify(user) + ':"new"_'
+        : JSON.stringify(session) + ':"new"_'
+    console.log("MARK ALL AS READ PREFIX", prefix)
+    await app.dao.request(['database', 'query'], app.databaseName, `(${
+        async (input, output, { tableName, indexName, update, range }) => {
+          await input.index(indexName).range(range).onChange((obj, oldObj) => {
+            if(obj) output.table(tableName).delete(obj.to)
+          })
+        }
+    })`, {
+      tableName: Notification.tableName,
+      indexName: user
+          ? Notification.tableName + "_userNotificationsByReadState"
+          : Notification.tableName + "_sessionNotificationsByReadState",
       range: {
         gte: prefix,
         lte: prefix + "\xFF\xFF\xFF\xFF"
@@ -467,6 +566,27 @@ definition.action({
     emit({
       type: "removed",
       notification
+    })
+  }
+})
+
+definition.action({
+  name: "removeAll",
+  properties: {
+  },
+  access: async ({}, { client, visibilityTest }) => {
+    if(!client.user) return false
+    if(visibilityTest) return true
+    return true
+  },
+  async execute({ notification, readState }, { client, service }, emit) {
+    const user = client.user
+    const session = (await getPublicInfo(client.sessionId)).id
+    console.log("REMOVE ALL!!", user, session)
+    emit({
+      type: "allRemoved",
+      user,
+      session
     })
   }
 })
