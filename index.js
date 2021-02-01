@@ -149,50 +149,8 @@ const Notification = definition.model({
             }
         )
       }
-    },
-
-    bySeverityCount: {
-      function: async function(input, output) {
-        await input.table('xmlAlert_Result').onChange(
-            (obj, oldObj, id, ts) => {
-              const oldSeverity = oldObj && oldObj.severity
-              const severity = obj && obj.severity
-              if(severity != oldSeverity) {
-                if(oldSeverity) output.update(`${oldObj.scan}_${oldSeverity}`, [
-                  { op: "conditional",
-                    conditions: [
-                      { test: 'lt', property: 'lastUpdate', value: ts }
-                    ],
-                    operations: [
-                      { op: 'add', property: 'count', value: -1 }
-                    ]
-                  }
-                ])
-                if(severity) output.update(`${obj.scan}_${severity}`, [
-                  { op: "conditional",
-                    conditions: [
-                      { test: 'notExist', property: 'count' }
-                    ],
-                    operations: [
-                      { op: 'set', property: 'count', value: 1 },
-                      { op: 'set', property: 'lastUpdate', value: ts }
-                    ]
-                  },
-                  { op: "conditional",
-                    conditions: [
-                      { test: 'lt', property: 'lastUpdate', value: ts }
-                    ],
-                    operations: [
-                      { op: 'add', property: 'count', value: 1 }
-                    ]
-                  },
-                  { op: 'merge', value: { severity: obj.severity, scan: obj.scan, lastUpdate: ts } },
-                ])
-              }
-            }
-        )
-      }
     }
+
   },
   crud: {
     deleteTrigger: true,
