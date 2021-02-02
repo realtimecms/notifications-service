@@ -212,8 +212,8 @@ definition.event({
   name: "allRemoved",
   async execute({ user, session }) {
     const prefix = user
-        ? JSON.stringify(user) + ':"new"_'
-        : JSON.stringify(session) + ':"new"_'
+        ? JSON.stringify(user) + ':'
+        : JSON.stringify(session) + ':'
     console.log("MARK ALL AS READ PREFIX", prefix)
     await app.dao.request(['database', 'query'], app.databaseName, `(${
         async (input, output, { tableName, indexName, update, range }) => {
