@@ -92,7 +92,7 @@ const Notification = definition.model({
                 { op: 'merge', value: { severity: obj.severity, scan: obj.scan, lastUpdate: ts } },
               ])
             } else if(!unread && oldUnread) { // been unread
-              output.update(obj.user, [
+              output.update(oldObj.user, [
                 { op: "conditional",
                   conditions: [
                     { test: 'lt', property: 'lastUpdate', value: ts }
@@ -135,7 +135,7 @@ const Notification = definition.model({
                   { op: 'merge', value: { severity: obj.severity, scan: obj.scan, lastUpdate: ts } },
                 ])
               } else if(!unread && oldUnread) { // been unread
-                output.update(obj.session, [
+                output.update(oldObj.session, [
                   { op: "conditional",
                     conditions: [
                       { test: 'lt', property: 'lastUpdate', value: ts }
