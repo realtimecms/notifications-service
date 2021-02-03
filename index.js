@@ -78,9 +78,9 @@ const Notification = definition.model({
       function: async function(input, output) {
         const unreadIndex = await input.index('notifications_Notification_userUnreadNotifications')
         await unreadIndex.onChange(
-            (obj, oldObj) => {
+            async (obj, oldObj) => {
               const user = (obj && obj.user) || (oldObj && oldObj.user)
-              const count = unreadIndex.count({
+              const count = await unreadIndex.count({
                 gt: user + '_',
                 lt: user + '_\xFF'
               })
@@ -106,9 +106,9 @@ const Notification = definition.model({
       function: async function(input, output) {
         const unreadIndex = await input.index('notifications_Notification_sessionUnreadNotifications')
         await unreadIndex.onChange(
-            (obj, oldObj) => {
+            async (obj, oldObj) => {
               const session = (obj && obj.session) || (oldObj && oldObj.session)
-              const count = unreadIndex.count({
+              const count = await unreadIndex.count({
                 gt: session + '_',
                 lt: session + '_\xFF'
               })
