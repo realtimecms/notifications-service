@@ -64,88 +64,58 @@ const Notification = definition.model({
     sessionNotificationsByReadState: {
       property: ["session", "readState"]
     },
+    userUnreadNotifications: {
+      function: async function(input, output) {
+        const mapper =
+            (obj) => obj && obj.readState == 'new' && obj.user &&
+                ({ id: `${obj.user}_${obj.id}`, user: obj.user, to: obj.id })
+        await input.table('notifications_Notification').onChange(
+            (obj, oldObj) => output.change(obj && mapper(obj), oldObj && mapper(oldObj))
+        )
+      }
+    },
     userUnreadNotificationsCount: { /// For counting
       function: async function(input, output) {
-        await input.table('notifications_Notification').onChange(
-          (obj, oldObj, id, ts) => {
-            const unread = obj && obj.user && obj.readState == 'new'
-            const oldUnread = oldObj && oldObj.user && oldObj.readState == 'new'
-            if(unread && !oldUnread) { // now unread
-              output.update(obj.user, [
-                { op: "conditional",
-                  conditions: [
-                    { test: 'notExist', property: 'count' }
-                  ],
-                  operations: [
-                    { op: 'set', property: 'count', value: 1 },
-                    { op: 'set', property: 'lastUpdate', value: ts }
-                  ]
-                },
-                { op: "conditional",
-                  conditions: [
-                    { test: 'lt', property: 'lastUpdate', value: ts }
-                  ],
-                  operations: [
-                    { op: 'add', property: 'count', value: 1 }
-                  ]
-                },
-                { op: 'merge', value: { severity: obj.severity, scan: obj.scan, lastUpdate: ts } },
-              ])
-            } else if(!unread && oldUnread) { // been unread
-              output.update(oldObj.user, [
-                { op: "conditional",
-                  conditions: [
-                    { test: 'lt', property: 'lastUpdate', value: ts }
-                  ],
-                  operations: [
-                    { op: 'add', property: 'count', value: -1 }
-                  ]
-                }
-              ])
+        const unreadIndex = await input.index('notifications_Notification_userUnreadNotifications')
+        await unreadIndex.onChange(
+            (obj, oldObj) => {
+              const user = (obj && obj.user) || (oldObj && oldObj.user)
+              const count = unreadIndex.count({
+                gt: user + '_',
+                lt: user + '_\xFF'
+              })
+              output.put({
+                id: user,
+                count
+              })
             }
-          }
+        )
+      }
+    },
+    sessionUnreadNotifications: {
+      function: async function(input, output) {
+        const mapper =
+            (obj) => obj.readState == 'new' && obj.session &&
+                ({ id: `${obj.session}_${obj.id}`, session: obj.session, to: obj.id })
+        await input.table('notifications_Notification').onChange(
+            (obj, oldObj) => output.change(obj && mapper(obj), oldObj && mapper(oldObj))
         )
       }
     },
     sessionUnreadNotificationsCount: { /// For counting
       function: async function(input, output) {
-        await input.table('notifications_Notification').onChange(
-            (obj, oldObj, id, ts) => {
-              const unread = obj && obj.session && obj.readState == 'new'
-              const oldUnread = oldObj && oldObj.session && oldObj.readState == 'new'
-              if(unread && !oldUnread) { // now unread
-                output.update(obj.session, [
-                  { op: "conditional",
-                    conditions: [
-                      { test: 'notExist', property: 'count' }
-                    ],
-                    operations: [
-                      { op: 'set', property: 'count', value: 1 },
-                      { op: 'set', property: 'lastUpdate', value: ts }
-                    ]
-                  },
-                  { op: "conditional",
-                    conditions: [
-                      { test: 'lt', property: 'lastUpdate', value: ts }
-                    ],
-                    operations: [
-                      { op: 'add', property: 'count', value: 1 }
-                    ]
-                  },
-                  { op: 'merge', value: { severity: obj.severity, scan: obj.scan, lastUpdate: ts } },
-                ])
-              } else if(!unread && oldUnread) { // been unread
-                output.update(oldObj.session, [
-                  { op: "conditional",
-                    conditions: [
-                      { test: 'lt', property: 'lastUpdate', value: ts }
-                    ],
-                    operations: [
-                      { op: 'add', property: 'count', value: -1 }
-                    ]
-                  }
-                ])
-              }
+        const unreadIndex = await input.index('notifications_Notification_sessionUnreadNotifications')
+        await unreadIndex.onChange(
+            (obj, oldObj) => {
+              const session = (obj && obj.session) || (oldObj && oldObj.session)
+              const count = unreadIndex.count({
+                gt: session + '_',
+                lt: session + '_\xFF'
+              })
+              output.put({
+                id: session,
+                count
+              })
             }
         )
       }
