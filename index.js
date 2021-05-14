@@ -1,5 +1,4 @@
-const App = require("@live-change/framework")
-const app = new App()
+const app = require("@live-change/framework").app()
 const validators = require("../validation")
 
 require('../../i18n/ejs-require.js')
